@@ -3,3 +3,10 @@
 __pycache__/
 *.csv
 data/
+*.gz
+*.zip
+*.pkl
+mlruns/
+*.pyc
+.DS_Store
+notebooks/.ipynb_checkpoints/
