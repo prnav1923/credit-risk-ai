@@ -21,17 +21,27 @@ TARGET_COL = "target"
 
 FEATURE_COLS = [
     "loan_amnt", "int_rate", "installment", "annual_inc",
-    "dti", "delinq_2yrs", "fico_range_low", "open_acc",
-    "pub_rec", "revol_bal", "revol_util", "total_acc",
-    "emp_length", "home_ownership", "verification_status",
-    "purpose", "grade", "sub_grade"
+    "dti", "delinq_2yrs", "fico_range_low", "fico_range_high",
+    "open_acc", "pub_rec", "revol_bal", "revol_util", "total_acc",
+    "emp_length", "mort_acc", "pub_rec_bankruptcies",
+    "num_actv_bc_tl", "bc_util", "percent_bc_gt_75", "avg_cur_bal",
+    "home_ownership", "verification_status", "purpose",
+    "grade", "sub_grade", "initial_list_status", "application_type"
 ]
 
 LEAKAGE_COLS = [
+    # Original leakage
     "loan_status", "funded_amnt", "funded_amnt_inv",
     "total_pymnt", "total_pymnt_inv", "total_rec_prncp",
     "total_rec_int", "recoveries", "collection_recovery_fee",
-    "out_prncp", "out_prncp_inv", "last_pymnt_amnt"
+    "out_prncp", "out_prncp_inv", "last_pymnt_amnt",
+    
+    # Newly identified leakage
+    "last_fico_range_high", "last_fico_range_low",
+    "total_rec_late_fee", "hardship_dpd", "hardship_amount",
+    "orig_projected_additional_accrued_interest",
+    "hardship_payoff_balance_amount",
+    "hardship_last_payment_amount"
 ]
 
 
@@ -76,6 +86,11 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
     cat_cols = df.select_dtypes(include="object").columns
     df[cat_cols] = df[cat_cols].fillna("Unknown")
+
+    # --- Feature Engineering ---
+    df['loan_to_income'] = df['loan_amnt'] / df['annual_inc']
+    df['fico_avg'] = (df['fico_range_low'] + df['fico_range_high']) / 2
+    df['high_utilization'] = (df['revol_util'] > 75).astype(int)
 
     logger.info(f"Clean shape: {df.shape}")
     return df

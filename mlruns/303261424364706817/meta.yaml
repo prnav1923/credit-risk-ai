@@ -1,0 +1,7 @@
+artifact_location: /Users/pranav/Code/credit-risk-ai/mlruns/303261424364706817
+creation_time: 1773516006047
+experiment_id: '303261424364706817'
+last_update_time: 1773516006047
+lifecycle_stage: active
+name: credit-risk-xgboost
+workspace: default

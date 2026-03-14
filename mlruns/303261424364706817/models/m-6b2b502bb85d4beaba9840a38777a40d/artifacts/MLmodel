@@ -1,0 +1,22 @@
+artifact_path: /Users/pranav/Code/credit-risk-ai/mlruns/303261424364706817/models/m-6b2b502bb85d4beaba9840a38777a40d/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.12.6
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBClassifier
+    model_format: ubj
+    xgb_version: 3.2.0
+mlflow_version: 3.10.1
+model_id: m-6b2b502bb85d4beaba9840a38777a40d
+model_size_bytes: 2365126
+model_uuid: m-6b2b502bb85d4beaba9840a38777a40d
+prompts: null
+run_id: d90a68e6c3d84e9a8c56132411de487e
+utc_time_created: '2026-03-14 19:21:45.025618'

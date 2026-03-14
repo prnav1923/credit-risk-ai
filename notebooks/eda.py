@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-df = pd.read_csv('/Users/pranav/Code/Credit Risk AI System/data/lending-club/accepted_2007_to_2018q4/accepted_2007_to_2018Q4.csv', low_memory=False)
+df = pd.read_csv('data/lending-club/accepted_2007_to_2018q4/accepted_2007_to_2018Q4.csv', low_memory=False)
 
 # Shape, target distribution
 print(df.shape)
