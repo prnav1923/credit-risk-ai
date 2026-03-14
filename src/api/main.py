@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from src.agent.agent import run_agent
 
 load_dotenv()
 
@@ -126,6 +127,12 @@ class ExplainResponse(BaseModel):
     decision: str
     top_risk_factors: list
     top_protective_factors: list
+
+class AgentRequest(BaseModel):
+    application: LoanApplication
+
+class AgentResponse(BaseModel):
+    report: str
 
 
 # --- Preprocess input ---
@@ -247,4 +254,15 @@ def explain(application: LoanApplication):
 
     except Exception as e:
         logger.error(f"Explanation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent", response_model=AgentResponse)
+def agent_endpoint(request: AgentRequest):
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    try:
+        report = run_agent(request.application.dict())
+        return AgentResponse(report=report)
+    except Exception as e:
+        logger.error(f"Agent error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
