@@ -1,0 +1,14 @@
+artifact_uri: /Users/pranav/Code/credit-risk-ai/mlruns/925055302608036601/1229a8f1181d4728bb487fcfbbd4c692/artifacts
+end_time: 1773525822313
+entry_point_name: ''
+experiment_id: '925055302608036601'
+lifecycle_stage: active
+run_id: 1229a8f1181d4728bb487fcfbbd4c692
+run_name: rag-evaluation
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1773525822303
+status: 3
+tags: []
+user_id: pranav
