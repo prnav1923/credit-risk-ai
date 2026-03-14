@@ -2,3 +2,4 @@
 .credai/
 __pycache__/
 *.csv
+data/
