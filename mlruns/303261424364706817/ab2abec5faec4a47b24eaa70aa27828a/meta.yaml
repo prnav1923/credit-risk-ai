@@ -1,0 +1,14 @@
+artifact_uri: /Users/pranav/Code/credit-risk-ai/mlruns/303261424364706817/ab2abec5faec4a47b24eaa70aa27828a/artifacts
+end_time: 1773520611494
+entry_point_name: ''
+experiment_id: '303261424364706817'
+lifecycle_stage: active
+run_id: ab2abec5faec4a47b24eaa70aa27828a
+run_name: xgboost-baseline
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1773520582915
+status: 3
+tags: []
+user_id: pranav

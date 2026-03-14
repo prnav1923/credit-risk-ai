@@ -88,9 +88,14 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df[cat_cols] = df[cat_cols].fillna("Unknown")
 
     # --- Feature Engineering ---
-    df['loan_to_income'] = df['loan_amnt'] / df['annual_inc']
+    # Avoid division by zero
+    df['loan_to_income'] = df['loan_amnt'] / df['annual_inc'].replace(0, np.nan)
     df['fico_avg'] = (df['fico_range_low'] + df['fico_range_high']) / 2
     df['high_utilization'] = (df['revol_util'] > 75).astype(int)
+
+    # Fill any inf or nan created by division
+    df['loan_to_income'] = df['loan_to_income'].replace([np.inf, -np.inf], np.nan)
+    df['loan_to_income'] = df['loan_to_income'].fillna(df['loan_to_income'].median())
 
     logger.info(f"Clean shape: {df.shape}")
     return df

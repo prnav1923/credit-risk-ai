@@ -42,8 +42,8 @@ NUMERIC_COLS = [
     "dti", "delinq_2yrs", "fico_range_low", "fico_range_high",
     "open_acc", "pub_rec", "revol_bal", "revol_util", "total_acc",
     "emp_length", "mort_acc", "pub_rec_bankruptcies",
-    "total_pymnt_inv", "num_actv_bc_tl", "bc_util",
-    "percent_bc_gt_75", "avg_cur_bal"
+    "num_actv_bc_tl", "bc_util", "percent_bc_gt_75", "avg_cur_bal",
+    "loan_to_income", "fico_avg", "high_utilization"  # ← make sure these are here
 ]
 
 

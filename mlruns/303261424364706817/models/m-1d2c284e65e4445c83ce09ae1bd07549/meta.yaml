@@ -1,0 +1,10 @@
+artifact_location: /Users/pranav/Code/credit-risk-ai/mlruns/303261424364706817/models/m-1d2c284e65e4445c83ce09ae1bd07549/artifacts
+creation_timestamp: 1773520609695
+experiment_id: '303261424364706817'
+last_updated_timestamp: 1773520611491
+model_id: m-1d2c284e65e4445c83ce09ae1bd07549
+model_type: null
+name: xgboost-model
+source_run_id: ab2abec5faec4a47b24eaa70aa27828a
+status: 2
+status_message: null
