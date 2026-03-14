@@ -1,0 +1,4 @@
+.env
+.credai/
+__pycache__/
+*.csv

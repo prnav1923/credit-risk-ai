@@ -1,0 +1,10 @@
+pandas
+numpy
+scikit-learn
+xgboost
+mlflow
+boto3
+fastapi
+uvicorn
+python-dotenv
+kaggle
