@@ -1,0 +1,93 @@
+{
+    "family": "credit-risk-task",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "1024",
+    "memory": "3072",
+    "executionRoleArn": "arn:aws:iam::435506672220:role/ecsTaskExecutionRole",
+    "containerDefinitions": [
+        {
+            "name": "credit-risk-ai",
+            "image": "435506672220.dkr.ecr.ap-south-1.amazonaws.com/credit-risk-ai:latest",
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "AWS_REGION",
+                    "value": "ap-south-1"
+                },
+                {
+                    "name": "LANGCHAIN_TRACING_V2",
+                    "value": "true"
+                },
+                {
+                    "name": "LANGCHAIN_PROJECT",
+                    "value": "credit-risk-ai"
+                }
+            ],
+            "secrets": [
+                {
+                    "name": "AWS_ACCESS_KEY_ID",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/AWS_ACCESS_KEY_ID"
+                },
+                {
+                    "name": "AWS_SECRET_ACCESS_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/AWS_SECRET_ACCESS_KEY"
+                },
+                {
+                    "name": "S3_BUCKET_NAME",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/S3_BUCKET_NAME"
+                },
+                {
+                    "name": "PINECONE_API_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/PINECONE_API_KEY"
+                },
+                {
+                    "name": "PINECONE_INDEX_NAME",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/PINECONE_INDEX_NAME"
+                },
+                {
+                    "name": "GROQ_API_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/GROQ_API_KEY"
+                },
+                {
+                    "name": "GOOGLE_API_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/GOOGLE_API_KEY"
+                },
+                {
+                    "name": "LANGCHAIN_API_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/LANGCHAIN_API_KEY"
+                },
+                {
+                    "name": "API_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-south-1:435506672220:parameter/credit-risk/API_KEY"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/credit-risk-ai",
+                    "awslogs-region": "ap-south-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "healthCheck": {
+                "command": [
+                    "CMD-SHELL",
+                    "curl -f http://localhost:8000/v1/health || exit 1"
+                ],
+                "interval": 30,
+                "timeout": 10,
+                "retries": 3,
+                "startPeriod": 60
+            }
+        }
+    ]
+}
