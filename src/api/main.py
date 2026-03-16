@@ -90,6 +90,7 @@ app = FastAPI(
     description="AI-powered credit risk scoring using XGBoost + LangChain RAG",
     version="1.0.0",
     lifespan=lifespan
+    # root_path="/v1"
 )
 
 
@@ -211,7 +212,7 @@ def get_decision(risk_score: float):
 
 # --- Endpoints ---
 
-@app.get("/health")
+@app.get("/v1/health")
 def health_check():
     return {
         "status": "healthy",
@@ -220,7 +221,7 @@ def health_check():
     }
 
 
-@app.get("/model-info")
+@app.get("/v1/model-info")
 def model_info():
     return {
         "model_type": "XGBoost Classifier",
@@ -235,7 +236,7 @@ def model_info():
     }
 
 
-@app.post("/predict", response_model=RiskResponse, dependencies=[Depends(verify_api_key)])
+@app.post("/v1/predict", response_model=RiskResponse, dependencies=[Depends(verify_api_key)])
 def predict(application: LoanApplication):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
@@ -258,7 +259,7 @@ def predict(application: LoanApplication):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/explain", response_model=ExplainResponse, dependencies=[Depends(verify_api_key)])
+@app.post("/v1/explain", response_model=ExplainResponse, dependencies=[Depends(verify_api_key)])
 def explain(application: LoanApplication):
     if model is None or explainer is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
@@ -299,7 +300,7 @@ def explain(application: LoanApplication):
         logger.error(f"Explanation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/agent", response_model=AgentResponse, dependencies=[Depends(verify_api_key)])
+@app.post("/v1/agent", response_model=AgentResponse, dependencies=[Depends(verify_api_key)])
 def agent_endpoint(request: AgentRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
