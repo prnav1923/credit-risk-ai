@@ -7,11 +7,14 @@ import pandas as pd
 import boto3
 import shap
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from src.agent.agent import run_agent
+from fastapi.security.api_key import APIKeyHeader
+from fastapi import Security
+from fastapi import FastAPI, HTTPException, Depends
 
 load_dotenv()
 
@@ -28,6 +31,13 @@ explainer = None
 
 BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 AWS_REGION = os.getenv("AWS_REGION")
+
+API_KEY = os.getenv("API_KEY")
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+
+async def verify_api_key(api_key: str = Security(api_key_header)):
+    if api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
 
 CATEGORICAL_COLS = [
     "home_ownership", "verification_status",
@@ -84,27 +94,29 @@ app = FastAPI(
 
 
 # --- Pydantic Schemas ---
+
+
 class LoanApplication(BaseModel):
-    loan_amnt: float = Field(..., example=10000.0, description="Loan amount in USD")
-    int_rate: float = Field(..., example=12.5, description="Interest rate %")
-    installment: float = Field(..., example=350.0, description="Monthly installment")
-    annual_inc: float = Field(..., example=60000.0, description="Annual income")
-    dti: float = Field(..., example=18.5, description="Debt to income ratio")
-    delinq_2yrs: float = Field(..., example=0.0, description="Delinquencies in last 2 years")
-    fico_range_low: float = Field(..., example=680.0, description="FICO score low")
-    fico_range_high: float = Field(..., example=684.0, description="FICO score high")
-    open_acc: float = Field(..., example=10.0, description="Number of open accounts")
-    pub_rec: float = Field(..., example=0.0, description="Public records")
-    revol_bal: float = Field(..., example=15000.0, description="Revolving balance")
-    revol_util: float = Field(..., example=45.0, description="Revolving utilization %")
-    total_acc: float = Field(..., example=25.0, description="Total accounts")
-    emp_length: float = Field(..., example=5.0, description="Employment length in years")
-    mort_acc: float = Field(..., example=2.0, description="Mortgage accounts")
-    pub_rec_bankruptcies: float = Field(..., example=0.0, description="Bankruptcies")
-    num_actv_bc_tl: float = Field(..., example=4.0, description="Active bankcard tradelines")
-    bc_util: float = Field(..., example=50.0, description="Bankcard utilization %")
-    percent_bc_gt_75: float = Field(..., example=25.0, description="% bankcards > 75% utilized")
-    avg_cur_bal: float = Field(..., example=8000.0, description="Average current balance")
+    loan_amnt: float = Field(..., gt=0, le=40000, example=10000.0, description="Loan amount in USD")
+    int_rate: float = Field(..., gt=0, le=31, example=12.5, description="Interest rate %")
+    installment: float = Field(..., gt=0, example=350.0, description="Monthly installment")
+    annual_inc: float = Field(..., gt=0, example=60000.0, description="Annual income")
+    dti: float = Field(..., ge=0, le=100, example=18.5, description="Debt to income ratio")
+    delinq_2yrs: float = Field(..., ge=0, example=0.0, description="Delinquencies in last 2 years")
+    fico_range_low: float = Field(..., ge=300, le=850, example=680.0, description="FICO score low")
+    fico_range_high: float = Field(..., ge=300, le=850, example=684.0, description="FICO score high")
+    open_acc: float = Field(..., ge=0, example=10.0, description="Number of open accounts")
+    pub_rec: float = Field(..., ge=0, example=0.0, description="Public records")
+    revol_bal: float = Field(..., ge=0, example=15000.0, description="Revolving balance")
+    revol_util: float = Field(..., ge=0, le=100, example=45.0, description="Revolving utilization %")
+    total_acc: float = Field(..., ge=0, example=25.0, description="Total accounts")
+    emp_length: float = Field(..., ge=0, le=10, example=5.0, description="Employment length in years")
+    mort_acc: float = Field(..., ge=0, example=2.0, description="Mortgage accounts")
+    pub_rec_bankruptcies: float = Field(..., ge=0, example=0.0, description="Bankruptcies")
+    num_actv_bc_tl: float = Field(..., ge=0, example=4.0, description="Active bankcard tradelines")
+    bc_util: float = Field(..., ge=0, le=100, example=50.0, description="Bankcard utilization %")
+    percent_bc_gt_75: float = Field(..., ge=0, le=100, example=25.0, description="% bankcards > 75% utilized")
+    avg_cur_bal: float = Field(..., ge=0, example=8000.0, description="Average current balance")
     home_ownership: str = Field(..., example="RENT", description="RENT/OWN/MORTGAGE")
     verification_status: str = Field(..., example="Verified", description="Income verification")
     purpose: str = Field(..., example="debt_consolidation", description="Loan purpose")
@@ -113,6 +125,37 @@ class LoanApplication(BaseModel):
     initial_list_status: str = Field(..., example="w", description="w or f")
     application_type: str = Field(..., example="Individual", description="Individual/Joint App")
 
+    @validator('fico_range_high')
+    def fico_high_must_be_gte_low(cls, v, values):
+        if 'fico_range_low' in values and v < values['fico_range_low']:
+            raise ValueError('fico_range_high must be >= fico_range_low')
+        return v
+
+    @validator('home_ownership')
+    def valid_home_ownership(cls, v):
+        valid = ['RENT', 'OWN', 'MORTGAGE', 'OTHER', 'NONE']
+        if v.upper() not in valid:
+            raise ValueError(f'home_ownership must be one of {valid}')
+        return v.upper()
+
+    @validator('grade')
+    def valid_grade(cls, v):
+        if v.upper() not in ['A', 'B', 'C', 'D', 'E', 'F', 'G']:
+            raise ValueError('grade must be A-G')
+        return v.upper()
+
+    @validator('application_type')
+    def valid_application_type(cls, v):
+        valid = ['Individual', 'Joint App']
+        if v not in valid:
+            raise ValueError(f'application_type must be one of {valid}')
+        return v
+
+    @validator('initial_list_status')
+    def valid_list_status(cls, v):
+        if v.lower() not in ['w', 'f']:
+            raise ValueError('initial_list_status must be w or f')
+        return v.lower()
 
 class RiskResponse(BaseModel):
     risk_score: float
@@ -192,7 +235,7 @@ def model_info():
     }
 
 
-@app.post("/predict", response_model=RiskResponse)
+@app.post("/predict", response_model=RiskResponse, dependencies=[Depends(verify_api_key)])
 def predict(application: LoanApplication):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
@@ -215,7 +258,7 @@ def predict(application: LoanApplication):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/explain", response_model=ExplainResponse)
+@app.post("/explain", response_model=ExplainResponse, dependencies=[Depends(verify_api_key)])
 def explain(application: LoanApplication):
     if model is None or explainer is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
@@ -256,7 +299,7 @@ def explain(application: LoanApplication):
         logger.error(f"Explanation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/agent", response_model=AgentResponse)
+@app.post("/agent", response_model=AgentResponse, dependencies=[Depends(verify_api_key)])
 def agent_endpoint(request: AgentRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
