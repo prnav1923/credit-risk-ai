@@ -1,0 +1,13 @@
+.credai/
+.env
+.git/
+.gitignore
+data/lending-club/
+mlruns/
+notebooks/
+__pycache__/
+*.pyc
+*.gz
+*.csv
+*.pkl
+.DS_Store
