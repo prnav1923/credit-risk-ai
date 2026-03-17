@@ -1,0 +1,71 @@
+CREDIT RISK ASSESSMENT POLICY DOCUMENT
+Version 1.0 | Lending Operations Division
+
+1. LOAN APPROVAL CRITERIA
+- Minimum FICO score: 650
+- Maximum DTI ratio: 43%
+- Minimum annual income: $25,000
+- Maximum loan amount: $40,000 for unsecured personal loans
+- Employment length: Minimum 1 year preferred
+
+2. RISK GRADE DEFINITIONS
+- Grade A (Low Risk): FICO > 750, DTI < 15%, score < 0.2
+- Grade B (Low-Medium Risk): FICO 700-750, DTI 15-20%, score 0.2-0.35
+- Grade C (Medium Risk): FICO 670-700, DTI 20-30%, score 0.35-0.5
+- Grade D (Medium-High Risk): FICO 640-670, DTI 30-35%, score 0.5-0.65
+- Grade E-G (High Risk): FICO < 640, DTI > 35%, score > 0.65
+
+3. AUTOMATIC DECLINE CRITERIA
+- FICO score below 580
+- DTI ratio above 50%
+- Bankruptcies in last 2 years
+- More than 3 delinquencies in last 2 years
+- Revolving utilization above 90%
+
+4. MANUAL REVIEW CRITERIA
+- Risk score between 0.3 and 0.6
+- Income not verified
+- Loan purpose: small business or medical
+- First time borrower with limited credit history
+- Joint applications with co-borrower DTI concerns
+
+5. INTEREST RATE POLICY
+- Grade A: 5.99% - 8.99%
+- Grade B: 9.99% - 12.99%
+- Grade C: 13.99% - 16.99%
+- Grade D: 17.99% - 20.99%
+- Grade E: 21.99% - 25.99%
+- Grade F-G: 26.99% - 30.99%
+
+6. DEBT CONSOLIDATION LOANS
+- Maximum consolidation amount: 85% of total existing debt
+- Verification of existing debt required for amounts > $15,000
+- DTI post-consolidation must be below 40%
+- Preferred for borrowers with revolving utilization > 60%
+
+7. HIGH RISK INDICATORS
+- Revolving utilization above 75%
+- Public records or bankruptcies present
+- Multiple hard inquiries in last 6 months
+- Delinquency history in last 2 years
+- Loan to income ratio above 0.4
+
+8. REGULATORY COMPLIANCE
+- All lending decisions must comply with Equal Credit Opportunity Act (ECOA)
+- Fair Credit Reporting Act (FCRA) compliance required
+- No discrimination based on race, gender, religion, national origin
+- Adverse action notices required for all declined applications
+- All decisions must be explainable and auditable
+
+9. MODEL GOVERNANCE
+- AI model predictions must be reviewed quarterly
+- AUC-ROC below 0.70 triggers mandatory model review
+- Feature importance must be logged for every prediction
+- Model drift monitored via CloudWatch metrics
+- Human override allowed for edge cases
+
+10. COLLECTIONS POLICY
+- 30 days past due: Automated reminder sent
+- 60 days past due: Collections team notified
+- 90 days past due: Loan charged off, sent to collections agency
+- Recovery rate target: 35% of charged off amount
