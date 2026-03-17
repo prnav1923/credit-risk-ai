@@ -15,7 +15,8 @@ from src.agent.agent import run_agent
 from fastapi.security.api_key import APIKeyHeader
 from fastapi import Security
 from fastapi import FastAPI, HTTPException, Depends
-
+from datetime import datetime
+import json
 load_dotenv()
 
 logging.basicConfig(
@@ -54,6 +55,13 @@ NUMERIC_COLS = [
     "loan_to_income", "fico_avg", "high_utilization"
 ]
 
+def get_decision(risk_score: float):
+    if risk_score < 0.3:
+        return "APPROVE", "LOW RISK"
+    elif risk_score < 0.6:
+        return "REVIEW", "MEDIUM RISK"
+    else:
+        return "DECLINE", "HIGH RISK"
 
 # --- Load model from S3 ---
 def load_model_from_s3():
@@ -309,4 +317,95 @@ def agent_endpoint(request: AgentRequest):
         return AgentResponse(report=report)
     except Exception as e:
         logger.error(f"Agent error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+class OverrideRequest(BaseModel):
+    application: LoanApplication
+    override_decision: str
+    reviewer_id: str
+    reason: str
+
+    @validator('override_decision')
+    def valid_decision(cls, v):
+        if v.upper() not in ['APPROVE', 'DECLINE', 'REVIEW']:
+            raise ValueError('override_decision must be APPROVE, DECLINE or REVIEW')
+        return v.upper()
+
+class OverrideResponse(BaseModel):
+    status: str
+    original_decision: str
+    override_decision: str
+    reviewer_id: str
+    reason: str
+    timestamp: str
+
+@app.post("/v1/override", response_model=OverrideResponse, dependencies=[Depends(verify_api_key)])
+def manual_override(request: OverrideRequest):
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    try:
+        # Get original prediction
+        X = preprocess_input(request.application)
+        risk_score = float(model.predict_proba(X)[:, 1][0])
+        original_decision, _ = get_decision(risk_score)
+
+        # Log override to S3
+        override_record = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "reviewer_id": request.reviewer_id,
+            "original_decision": original_decision,
+            "override_decision": request.override_decision,
+            "reason": request.reason,
+            "risk_score": round(risk_score, 4),
+            "application": request.application.dict()
+        }
+
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION"))
+        key = f"audit/overrides/{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{request.reviewer_id}.json"
+        s3.put_object(
+            Bucket=os.getenv("S3_BUCKET_NAME"),
+            Key=key,
+            Body=json.dumps(override_record)
+        )
+
+        logger.info(f"Override logged to S3: {key}")
+
+        return OverrideResponse(
+            status="override_recorded",
+            original_decision=original_decision,
+            override_decision=request.override_decision,
+            reviewer_id=request.reviewer_id,
+            reason=request.reason,
+            timestamp=datetime.utcnow().isoformat()
+        )
+    except Exception as e:
+        logger.error(f"Override error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/v1/audit", dependencies=[Depends(verify_api_key)])
+def get_audit_log():
+    try:
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION"))
+        response = s3.list_objects_v2(
+            Bucket=os.getenv("S3_BUCKET_NAME"),
+            Prefix="audit/overrides/"
+        )
+
+        overrides = []
+        if "Contents" in response:
+            for obj in response["Contents"][:20]:  # last 20 overrides
+                record = s3.get_object(
+                    Bucket=os.getenv("S3_BUCKET_NAME"),
+                    Key=obj["Key"]
+                )
+                overrides.append(json.loads(record["Body"].read()))
+
+        return {
+            "total_overrides": len(overrides),
+            "overrides": overrides
+        }
+    except Exception as e:
+        logger.error(f"Audit error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

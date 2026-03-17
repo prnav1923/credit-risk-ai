@@ -148,7 +148,6 @@ def run_ragas_evaluation(questions, answers, contexts, ground_truths):
     logger.info("Evaluation complete ✅")
     return results
 
-
 # --- Log to MLflow ---
 def log_to_mlflow(results: dict):
     logger.info("Logging evaluation results to MLflow...")
