@@ -17,6 +17,7 @@ from fastapi import Security
 from fastapi import FastAPI, HTTPException, Depends
 from datetime import datetime
 import json
+from src.monitoring.drift_detector import run_drift_detection
 load_dotenv()
 
 logging.basicConfig(
@@ -408,4 +409,13 @@ def get_audit_log():
         }
     except Exception as e:
         logger.error(f"Audit error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/v1/monitor", dependencies=[Depends(verify_api_key)])
+def monitor():
+    try:
+        report = run_drift_detection()
+        return report
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
