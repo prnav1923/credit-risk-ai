@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy source code
 COPY src/ ./src/
-COPY data/policies/ ./data/policies/
+COPY policies/ ./data/policies/
 
 # Expose port
 EXPOSE 8000
