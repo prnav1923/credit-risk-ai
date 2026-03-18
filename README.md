@@ -323,7 +323,8 @@ curl http://localhost:8000/v1/monitor \
 ## 📈 Roadmap
 
 - [x] v1.0 — Core system (ML + RAG + Agent + API + Deployment)
-- [ ] v2.0 — Fraud Detection + Multi-Agent + MCP Server + Streamlit UI
+- [x] v1.1 — MCP Server (7 tools, Claude Desktop integration)
+- [ ] v2.0 — Fraud Detection + Multi-Agent + Streamlit UI
 - [ ] v2.1 — PostgreSQL + SQLAlchemy for agent decision audit logging
 - [ ] v2.2 — Redis caching for async prediction endpoints
 - [ ] v3.0 — Kafka streaming + Real-time scoring pipeline
