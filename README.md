@@ -332,7 +332,7 @@ curl http://localhost:8000/v1/monitor \
 ## 👤 Author
 
 **Pranav** — Data Analyst → AI Engineer  
-[GitHub](https://github.com/prnav1923) • [LinkedIn](https://linkedin.com/in/yourprofile)
+[GitHub](https://github.com/prnav1923) • [LinkedIn](https://www.linkedin.com/in/pranav-kumar-1b6843203/)
 
 ---
 
