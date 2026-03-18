@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add project root to path so src imports work
+sys.path.insert(0, '/Users/pranav/Code/credit-risk-ai')
+
 import asyncio
 import json
 import logging
@@ -150,7 +156,54 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
                 "required": []
             }
-        )
+        ),
+        Tool(
+    name="override_credit_decision",
+    description=(
+        "Override the AI credit risk decision with a human underwriter decision. "
+        "Use this when a human reviewer disagrees with the model's recommendation. "
+        "Logs the override to S3 audit trail for compliance. "
+        "Required: application data, override decision (APPROVE/REVIEW/DECLINE), "
+        "reviewer ID, and reason for override."
+    ),
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "application": {
+                "type": "object",
+                "description": "Loan application data.",
+            },
+            "override_decision": {
+                "type": "string",
+                "enum": ["APPROVE", "REVIEW", "DECLINE"],
+                "description": "Human reviewer's decision."
+            },
+            "reviewer_id": {
+                "type": "string",
+                "description": "ID of the human reviewer e.g. underwriter_001"
+            },
+            "reason": {
+                "type": "string",
+                "description": "Reason for overriding the AI decision."
+            }
+        },
+        "required": ["override_decision", "reviewer_id", "reason"]
+    }
+),
+        Tool(
+            name="get_audit_log",
+            description=(
+                "Retrieve the audit log of all human override decisions. "
+                "Shows reviewer ID, original AI decision, override decision, "
+                "reason, and timestamp for each override. "
+                "Use this to review compliance history."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
     ]
 
 
@@ -262,6 +315,68 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     f"Dataset: {result['dataset']}\n"
                     f"Version: {result['version']}"
                 )
+                return [TextContent(type="text", text=output)]
+            except Exception as e:
+                return [TextContent(type="text", text=f"Error: {str(e)}")]
+        
+        # --- Tool 6: Override Decision ---
+        elif name == "override_credit_decision":
+            application = arguments.get("application", SAMPLE_APPLICATION)
+            override_decision = arguments.get("override_decision")
+            reviewer_id = arguments.get("reviewer_id")
+            reason = arguments.get("reason")
+            try:
+                response = await client.post(
+                    f"{API_BASE_URL}/v1/override",
+                    headers=HEADERS,
+                    json={
+                        "application": application,
+                        "override_decision": override_decision,
+                        "reviewer_id": reviewer_id,
+                        "reason": reason
+                    }
+                )
+                result = response.json()
+                output = (
+                    f"✅ Override Recorded Successfully\n\n"
+                    f"Original AI Decision: {result['original_decision']}\n"
+                    f"Human Override: {result['override_decision']}\n"
+                    f"Reviewer: {result['reviewer_id']}\n"
+                    f"Reason: {result['reason']}\n"
+                    f"Timestamp: {result['timestamp']}\n"
+                    f"Status: Logged to S3 audit trail for compliance"
+                )
+                return [TextContent(type="text", text=output)]
+            except Exception as e:
+                return [TextContent(type="text", text=f"Error: {str(e)}")]
+            
+            # --- Tool 7: Get Audit Log ---
+        elif name == "get_audit_log":
+            try:
+                response = await client.get(
+                    f"{API_BASE_URL}/v1/audit",
+                    headers=HEADERS
+                )
+                result = response.json()
+                
+                if result['total_overrides'] == 0:
+                    return [TextContent(type="text", text="No overrides recorded yet.")]
+                
+                output = f"Audit Log — {result['total_overrides']} override(s) recorded:\n\n"
+            
+                for i, override in enumerate(result['overrides'], 1):
+                    output += (
+                        f"Override #{i}\n"
+                        f"  Timestamp:         {override['timestamp']}\n"
+                        f"  Reviewer:          {override['reviewer_id']}\n"
+                        f"  Original Decision: {override['original_decision']}\n"
+                        f"  Override Decision: {override['override_decision']}\n"
+                        f"  Risk Score:        {override['risk_score']}\n"
+                        f"  Reason:            {override['reason']}\n"
+                        f"  ─────────────────────────────────\n"
+                    )
+        
+                output += "\nAll overrides logged to S3 for regulatory compliance."
                 return [TextContent(type="text", text=output)]
             except Exception as e:
                 return [TextContent(type="text", text=f"Error: {str(e)}")]
