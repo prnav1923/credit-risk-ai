@@ -20,6 +20,9 @@ import json
 from src.monitoring.drift_detector import run_drift_detection
 from src.model.fraud_detector import load_fraud_models_from_s3, predict_fraud
 from src.agent.multi_agent import run_multi_agent
+from sqlalchemy.orm import Session
+from src.database import get_db, Prediction, AgentDecision, Override, DriftReport, init_db
+from src.cache import get_cache_key, get_cached, set_cached, get_cache_stats
 
 load_dotenv()
 
@@ -99,6 +102,7 @@ def load_model_from_s3():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_model_from_s3()
+    init_db()
     yield
     logger.info("Shutting down...")
 
@@ -283,19 +287,28 @@ def model_info():
 def predict(application: LoanApplication):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
-
     try:
+        # Check cache first
+        cache_key = get_cache_key("predict", application.dict())
+        cached = get_cached(cache_key)
+        if cached:
+            return RiskResponse(**cached)
+
         X = preprocess_input(application)
         risk_score = float(model.predict_proba(X)[:, 1][0])
         decision, risk_level = get_decision(risk_score)
 
-        return RiskResponse(
+        result = RiskResponse(
             risk_score=round(risk_score, 4),
             decision=decision,
             risk_level=risk_level,
             confidence=f"{round(risk_score * 100, 1)}%",
             message=f"Application {decision} — {risk_level} with score {round(risk_score, 4)}"
         )
+
+        # Cache the result
+        set_cached(cache_key, result.dict())
+        return result
 
     except Exception as e:
         logger.error(f"Prediction error: {e}")
@@ -385,6 +398,19 @@ def manual_override(request: OverrideRequest):
         risk_score = float(model.predict_proba(X)[:, 1][0])
         original_decision, _ = get_decision(risk_score)
 
+        # Log to PostgreSQL
+        override = Override(
+            reviewer_id=request.reviewer_id,
+            original_decision=original_decision,
+            override_decision=request.override_decision,
+            reason=request.reason,
+            risk_score=round(risk_score, 4),
+            application_json=request.application.dict()
+        )
+        db.add(override)
+        db.commit()
+    
+
         # Log override to S3
         override_record = {
             "timestamp": datetime.utcnow().isoformat(),
@@ -470,7 +496,7 @@ def fraud_detection(application: LoanApplication):
 
 
 @app.post("/v1/assess", response_model=AssessResponse, dependencies=[Depends(verify_api_key)])
-def assess(application: LoanApplication):
+def assess(application: LoanApplication, db: Session = Depends(get_db)):
     if model is None or iso_forest is None:
         raise HTTPException(status_code=503, detail="Models not loaded")
     try:
@@ -498,6 +524,33 @@ def assess(application: LoanApplication):
         else:
             combined_decision = "APPROVE"
             combined_risk = "LOW RISK"
+        
+        # Log to PostgreSQL
+        prediction = Prediction(
+            loan_amnt=application.loan_amnt,
+            int_rate=application.int_rate,
+            annual_inc=application.annual_inc,
+            dti=application.dti,
+            fico_range_low=application.fico_range_low,
+            fico_range_high=application.fico_range_high,
+            grade=application.grade,
+            sub_grade=application.sub_grade,
+            home_ownership=application.home_ownership,
+            purpose=application.purpose,
+            credit_risk_score=round(risk_score, 4),
+            credit_decision=credit_decision,
+            credit_risk_level=credit_risk_level,
+            fraud_score=fraud_result["fraud_score"],
+            fraud_flag=fraud_result["fraud_flag"],
+            fraud_risk=fraud_result["fraud_risk"],
+            fraud_indicators=fraud_result["fraud_indicators"],
+            combined_decision=combined_decision,
+            combined_risk=combined_risk,
+            application_json=application.dict()
+        )
+        db.add(prediction)
+        db.commit()
+        logger.info(f"Prediction logged to PostgreSQL — ID: {prediction.id}")
 
         return AssessResponse(
             credit_risk_score=round(risk_score, 4),
@@ -525,3 +578,30 @@ def multi_agent_endpoint(request: AgentRequest):
     except Exception as e:
         logger.error(f"Multi-agent error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/v1/predictions", dependencies=[Depends(verify_api_key)])
+def get_predictions(limit: int = 20, db: Session = Depends(get_db)):
+    predictions = db.query(Prediction).order_by(
+        Prediction.timestamp.desc()
+    ).limit(limit).all()
+    return {
+        "total": db.query(Prediction).count(),
+        "predictions": [
+            {
+                "id": p.id,
+                "timestamp": p.timestamp.isoformat(),
+                "loan_amnt": p.loan_amnt,
+                "grade": p.grade,
+                "credit_risk_score": p.credit_risk_score,
+                "credit_decision": p.credit_decision,
+                "fraud_score": p.fraud_score,
+                "fraud_flag": p.fraud_flag,
+                "combined_decision": p.combined_decision
+            }
+            for p in predictions
+        ]
+    }
+
+@app.get("/v1/cache", dependencies=[Depends(verify_api_key)])
+def cache_stats():
+    return get_cache_stats()
