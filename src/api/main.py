@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from datetime import datetime
 import json
 from src.monitoring.drift_detector import run_drift_detection
+from src.model.fraud_detector import load_fraud_models_from_s3, predict_fraud
 load_dotenv()
 
 logging.basicConfig(
@@ -30,6 +31,10 @@ logger = logging.getLogger(__name__)
 model = None
 encoders = None
 explainer = None
+iso_forest = None
+scaler = None
+xgbod = None
+fraud_feature_cols = None
 
 BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 AWS_REGION = os.getenv("AWS_REGION")
@@ -66,7 +71,7 @@ def get_decision(risk_score: float):
 
 # --- Load model from S3 ---
 def load_model_from_s3():
-    global model, encoders, explainer
+    global model, encoders, explainer, iso_forest, scaler, xgbod, fraud_feature_cols
     logger.info("Loading model from S3...")
 
     s3 = boto3.client("s3", region_name=AWS_REGION)
@@ -81,6 +86,9 @@ def load_model_from_s3():
 
     # Build SHAP explainer
     explainer = shap.TreeExplainer(model)
+
+    # Load fraud models
+    iso_forest, scaler, xgbod, fraud_feature_cols = load_fraud_models_from_s3()
 
     logger.info("Model loaded successfully ✅")
 
@@ -186,6 +194,27 @@ class AgentRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     report: str
+
+class FraudResponse(BaseModel):
+    fraud_score: float
+    fraud_flag: bool
+    fraud_risk: str
+    fraud_indicators: list
+
+class AssessResponse(BaseModel):
+    # Credit Risk
+    credit_risk_score: float
+    credit_decision: str
+    credit_risk_level: str
+    # Fraud
+    fraud_score: float
+    fraud_flag: bool
+    fraud_risk: str
+    fraud_indicators: list
+    # Combined
+    combined_decision: str
+    combined_risk: str
+    message: str
 
 
 # --- Preprocess input ---
@@ -418,4 +447,65 @@ def monitor():
         report = run_drift_detection()
         return report
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/v1/fraud", response_model=FraudResponse, dependencies=[Depends(verify_api_key)])
+def fraud_detection(application: LoanApplication):
+    if iso_forest is None:
+        raise HTTPException(status_code=503, detail="Fraud model not loaded")
+    try:
+        result = predict_fraud(
+            application.dict(),
+            iso_forest, scaler, xgbod, fraud_feature_cols
+        )
+        return FraudResponse(**result)
+    except Exception as e:
+        logger.error(f"Fraud detection error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v1/assess", response_model=AssessResponse, dependencies=[Depends(verify_api_key)])
+def assess(application: LoanApplication):
+    if model is None or iso_forest is None:
+        raise HTTPException(status_code=503, detail="Models not loaded")
+    try:
+        # Credit risk
+        X = preprocess_input(application)
+        risk_score = float(model.predict_proba(X)[:, 1][0])
+        credit_decision, credit_risk_level = get_decision(risk_score)
+
+        # Fraud detection
+        fraud_result = predict_fraud(
+            application.dict(),
+            iso_forest, scaler, xgbod, fraud_feature_cols
+        )
+
+        # Combined decision
+        if fraud_result["fraud_flag"]:
+            combined_decision = "DECLINE"
+            combined_risk = "FRAUD DETECTED"
+        elif credit_decision == "DECLINE":
+            combined_decision = "DECLINE"
+            combined_risk = "HIGH CREDIT RISK"
+        elif credit_decision == "REVIEW" or fraud_result["fraud_risk"] == "MEDIUM":
+            combined_decision = "REVIEW"
+            combined_risk = "MANUAL REVIEW REQUIRED"
+        else:
+            combined_decision = "APPROVE"
+            combined_risk = "LOW RISK"
+
+        return AssessResponse(
+            credit_risk_score=round(risk_score, 4),
+            credit_decision=credit_decision,
+            credit_risk_level=credit_risk_level,
+            fraud_score=fraud_result["fraud_score"],
+            fraud_flag=fraud_result["fraud_flag"],
+            fraud_risk=fraud_result["fraud_risk"],
+            fraud_indicators=fraud_result["fraud_indicators"],
+            combined_decision=combined_decision,
+            combined_risk=combined_risk,
+            message=f"{combined_decision} — Credit Risk: {round(risk_score, 4)}, Fraud Risk: {fraud_result['fraud_risk']}"
+        )
+    except Exception as e:
+        logger.error(f"Assessment error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
