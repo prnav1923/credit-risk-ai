@@ -19,6 +19,8 @@ from datetime import datetime
 import json
 from src.monitoring.drift_detector import run_drift_detection
 from src.model.fraud_detector import load_fraud_models_from_s3, predict_fraud
+from src.agent.multi_agent import run_multi_agent
+
 load_dotenv()
 
 logging.basicConfig(
@@ -215,6 +217,9 @@ class AssessResponse(BaseModel):
     combined_decision: str
     combined_risk: str
     message: str
+
+class MultiAgentResponse(BaseModel):
+    report: str
 
 
 # --- Preprocess input ---
@@ -508,4 +513,15 @@ def assess(application: LoanApplication):
         )
     except Exception as e:
         logger.error(f"Assessment error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/v1/multi-agent", response_model=MultiAgentResponse, dependencies=[Depends(verify_api_key)])
+def multi_agent_endpoint(request: AgentRequest):
+    if model is None:
+        raise HTTPException(status_code=503, detail="Models not loaded")
+    try:
+        report = run_multi_agent(request.application.dict())
+        return MultiAgentResponse(report=report)
+    except Exception as e:
+        logger.error(f"Multi-agent error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
