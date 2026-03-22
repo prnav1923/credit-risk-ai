@@ -11,7 +11,7 @@ from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_react_agent
 from langchain_core.messages import HumanMessage
 
 load_dotenv()

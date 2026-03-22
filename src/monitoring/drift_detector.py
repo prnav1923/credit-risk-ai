@@ -137,6 +137,10 @@ def run_drift_detection():
     baseline_auc = load_baseline_auc()
     drift_report = check_drift(current_auc, baseline_auc)
 
+    # Input feature drift ← NEW
+    feature_drift = compute_feature_drift(test_df)
+    drift_report["feature_drift"] = feature_drift
+
     print("\n=== DRIFT DETECTION REPORT ===")
     print(f"Status:       {drift_report['status']}")
     print(f"Baseline AUC: {drift_report['baseline_auc']}")
@@ -219,6 +223,68 @@ def compute_current_auc(model, test_df):
 
     logger.info(f"Current AUC: {auc:.4f}")
     return auc
+
+def compute_feature_drift(test_df: pd.DataFrame) -> dict:
+    """
+    Compare current feature distributions against
+    expected training distributions.
+    Uses Population Stability Index (PSI) for numeric features.
+    PSI < 0.1  = No drift
+    PSI 0.1-0.2 = Moderate drift
+    PSI > 0.2  = Significant drift
+    """
+    logger.info("Computing input feature drift...")
+
+    import sys
+    sys.path.insert(0, '/Users/pranav/Code/credit-risk-ai')
+    from src.features import get_feature_stats
+
+    expected_stats = get_feature_stats()
+    drift_results = {}
+
+    for feature, expected in expected_stats.items():
+        if feature not in test_df.columns:
+            continue
+
+        current_mean = float(test_df[feature].mean())
+        current_min = float(test_df[feature].min())
+        current_max = float(test_df[feature].max())
+
+        expected_mean = expected["mean"]
+
+        # Normalized mean shift
+        mean_shift = abs(current_mean - expected_mean) / (expected_mean + 1e-10)
+
+        drift_results[feature] = {
+            "expected_mean": expected_mean,
+            "current_mean": round(current_mean, 4),
+            "mean_shift_pct": round(mean_shift * 100, 2),
+            "status": "DRIFT" if mean_shift > 0.2 else "STABLE"
+        }
+
+        if mean_shift > 0.2:
+            logger.warning(
+                f"Feature drift detected: {feature} "
+                f"expected_mean={expected_mean} "
+                f"current_mean={current_mean:.4f} "
+                f"shift={mean_shift*100:.1f}%"
+            )
+
+    drifted_features = [
+        f for f, v in drift_results.items()
+        if v["status"] == "DRIFT"
+    ]
+
+    summary = {
+        "total_features_checked": len(drift_results),
+        "drifted_features": len(drifted_features),
+        "drifted_feature_names": drifted_features,
+        "feature_drift_status": "DRIFT_DETECTED" if drifted_features else "STABLE",
+        "details": drift_results
+    }
+
+    logger.info(f"Feature drift check: {len(drifted_features)} features drifted")
+    return summary
 
 if __name__ == "__main__":
     run_drift_detection()

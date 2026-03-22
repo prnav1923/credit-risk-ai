@@ -6,6 +6,7 @@ import pandas as pd
 import boto3
 from sklearn.model_selection import train_test_split
 from dotenv import load_dotenv
+from src.features import engineer_features, fill_nulls, LEAKAGE_COLS, FEATURE_COLS
 
 load_dotenv()
 
@@ -63,15 +64,11 @@ def load_raw_data(filepath: str) -> pd.DataFrame:
 # --- Step 2: Clean ---
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("Cleaning data...")
-
-    # Drop leakage columns
     df = df.drop(columns=LEAKAGE_COLS, errors="ignore")
-
-    # Keep only relevant features + target
     cols_to_keep = [c for c in FEATURE_COLS if c in df.columns] + [TARGET_COL]
-    df = df[cols_to_keep]
+    df = df[[c for c in cols_to_keep if c in df.columns]]
 
-    # Clean emp_length → extract number
+    # Clean emp_length
     if "emp_length" in df.columns:
         df["emp_length"] = df["emp_length"].str.extract(r"(\d+)").astype(float)
 
@@ -80,22 +77,11 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns and df[col].dtype == object:
             df[col] = df[col].str.replace("%", "").astype(float)
 
-    # Fill nulls — median for numeric, 'Unknown' for categorical
-    num_cols = df.select_dtypes(include=np.number).columns
-    df[num_cols] = df[num_cols].fillna(df[num_cols].median())
+    # Engineer features — single source of truth
+    df = engineer_features(df)
 
-    cat_cols = df.select_dtypes(include="object").columns
-    df[cat_cols] = df[cat_cols].fillna("Unknown")
-
-    # --- Feature Engineering ---
-    # Avoid division by zero
-    df['loan_to_income'] = df['loan_amnt'] / df['annual_inc'].replace(0, np.nan)
-    df['fico_avg'] = (df['fico_range_low'] + df['fico_range_high']) / 2
-    df['high_utilization'] = (df['revol_util'] > 75).astype(int)
-
-    # Fill any inf or nan created by division
-    df['loan_to_income'] = df['loan_to_income'].replace([np.inf, -np.inf], np.nan)
-    df['loan_to_income'] = df['loan_to_income'].fillna(df['loan_to_income'].median())
+    # Fill nulls — single source of truth
+    df = fill_nulls(df)
 
     logger.info(f"Clean shape: {df.shape}")
     return df
