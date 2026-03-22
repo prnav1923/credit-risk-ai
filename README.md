@@ -13,9 +13,12 @@
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker)
 ![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions)
 ![MLflow](https://img.shields.io/badge/MLflow-3.10-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue?logo=postgresql)
+![Redis](https://img.shields.io/badge/Redis-Caching-red?logo=redis)
+![Kafka](https://img.shields.io/badge/Kafka-Streaming-black?logo=apachekafka)
 ![MCP](https://img.shields.io/badge/MCP-Claude%20Desktop-orange)
 
-**Production-grade AI system combining classical ML, fraud detection, LLM-based agentic reasoning, and Model Context Protocol (MCP) for real-time credit risk assessment.**
+**Production-grade AI system combining classical ML, fraud detection, multi-agent reasoning, real-time streaming, and Model Context Protocol (MCP) for end-to-end credit risk assessment.**
 
 [Architecture](#architecture) • [API Endpoints](#api-endpoints) • [MCP Integration](#mcp-integration) • [Setup](#setup) • [Demo](#demo)
 
@@ -31,64 +34,74 @@ Financial institutions process thousands of loan applications daily. Traditional
 2. **Fraud Detection** — Does this application show signs of fraud?
 3. **Explainability** — Why did the system make this decision?
 
-It combines classical ML with modern LLM-based agentic AI and exposes everything via a Model Context Protocol (MCP) server — enabling any MCP-compatible client (like Claude Desktop) to directly call the system's tools in natural language.
+It combines classical ML with modern LLM-based multi-agent AI, real-time Kafka streaming, PostgreSQL persistence, Redis caching, and exposes everything via a Model Context Protocol (MCP) server — enabling any MCP-compatible client (like Claude Desktop) to call the system's tools in natural language.
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                   CREDIT RISK ASSESSMENT AI SYSTEM v1.2             │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    DATA LAYER                               │   │
-│  │  Lending Club (1.3M records) → S3 Data Lake                │   │
-│  │  Feature Engineering (31 features, no leakage)             │   │
-│  └─────────────────────┬───────────────────────────────────────┘   │
-│                        │                                           │
-│  ┌─────────────────────▼───────────────────────────────────────┐   │
-│  │                    ML LAYER                                 │   │
-│  │  ┌─────────────────────┐  ┌──────────────────────────────┐ │   │
-│  │  │   Credit Risk Model  │  │    Fraud Detection Ensemble  │ │   │
-│  │  │   XGBoost Classifier │  │  Isolation Forest + XGBOD   │ │   │
-│  │  │   AUC-ROC: 0.7198    │  │  AUC-ROC: 0.8841            │ │   │
-│  │  │   MLflow Tracked     │  │  7.31% fraud rate           │ │   │
-│  │  └─────────────────────┘  └──────────────────────────────┘ │   │
-│  └─────────────────────┬───────────────────────────────────────┘   │
-│                        │                                           │
-│  ┌─────────────────────▼───────────────────────────────────────┐   │
-│  │                  INTELLIGENCE LAYER                         │   │
-│  │  ┌──────────────────┐  ┌──────────────────────────────────┐│   │
-│  │  │  LangChain RAG   │  │    ReAct Agent (Groq Llama 3.3) ││   │
-│  │  │  Pinecone Vector │  │    4 Tools: PredictRisk,        ││   │
-│  │  │  Policy Docs     │  │    RetrievePolicy,              ││   │
-│  │  │  Sem Sim: 0.62   │  │    ExplainDecision,             ││   │
-│  │  └──────────────────┘  │    RetrieveSimilarCases         ││   │
-│  │                        └──────────────────────────────────┘│   │
-│  └─────────────────────┬───────────────────────────────────────┘   │
-│                        │                                           │
-│  ┌─────────────────────▼───────────────────────────────────────┐   │
-│  │              FastAPI — 10 Versioned Endpoints               │   │
-│  │  /v1/assess  /v1/predict  /v1/fraud  /v1/explain            │   │
-│  │  /v1/agent   /v1/override /v1/audit  /v1/monitor            │   │
-│  │  /v1/health  /v1/model-info                                 │   │
-│  │  API Key Auth + Input Validation + Pydantic Schemas         │   │
-│  └─────────────────────┬───────────────────────────────────────┘   │
-│                        │                                           │
-│  ┌─────────────────────▼───────────────────────────────────────┐   │
-│  │                   MCP SERVER                                │   │
-│  │  7 Tools exposed for Claude Desktop integration             │   │
-│  │  assess_credit_risk • explain_credit_decision               │   │
-│  │  query_credit_policy • run_full_agent_analysis              │   │
-│  │  override_credit_decision • get_audit_log • get_model_info  │   │
-│  └─────────────────────┬───────────────────────────────────────┘   │
-│                        │                                           │
-│  ┌─────────────────────▼───────────────────────────────────────┐   │
-│  │              AWS INFRASTRUCTURE                             │   │
-│  │  ECS Fargate → ECR → CloudWatch → SSM → GitHub Actions     │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                  CREDIT RISK ASSESSMENT AI SYSTEM v2.0                   │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │                        DATA LAYER                                │   │
+│  │  Lending Club (1.3M records) → S3 Data Lake                     │   │
+│  │  Feature Engineering (31 features, zero leakage validated)      │   │
+│  │  Kafka Real-time Streaming → Consumer → Score → PostgreSQL      │   │
+│  └──────────────────────────┬───────────────────────────────────────┘   │
+│                             │                                            │
+│  ┌──────────────────────────▼───────────────────────────────────────┐   │
+│  │                        ML LAYER                                  │   │
+│  │  ┌──────────────────────────┐  ┌──────────────────────────────┐ │   │
+│  │  │    Credit Risk Model     │  │   Fraud Detection Ensemble   │ │   │
+│  │  │    XGBoost Classifier    │  │  Isolation Forest + XGBOD    │ │   │
+│  │  │    AUC-ROC: 0.7198       │  │  AUC-ROC: 0.8841            │ │   │
+│  │  │    MLflow Tracked        │  │  Fraud Rate: 7.31%           │ │   │
+│  │  └──────────────────────────┘  └──────────────────────────────┘ │   │
+│  └──────────────────────────┬───────────────────────────────────────┘   │
+│                             │                                            │
+│  ┌──────────────────────────▼───────────────────────────────────────┐   │
+│  │                    INTELLIGENCE LAYER                            │   │
+│  │  ┌───────────────────┐  ┌──────────────────────────────────────┐│   │
+│  │  │  LangChain RAG    │  │  Multi-Agent (Groq Llama 3.3 70B)   ││   │
+│  │  │  Pinecone Vector  │  │  ┌────────────────────────────────┐ ││   │
+│  │  │  Policy Docs      │  │  │ Risk Agent                     │ ││   │
+│  │  │  Sem Sim: 0.62    │  │  │ PredictRisk+ExplainDecision    │ ││   │
+│  │  └───────────────────┘  │  │ +DetectFraud                   │ ││   │
+│  │                         │  ├────────────────────────────────┤ ││   │
+│  │                         │  │ Compliance Agent               │ ││   │
+│  │                         │  │ RetrievePolicy+CheckECOA/FCRA  │ ││   │
+│  │                         │  ├────────────────────────────────┤ ││   │
+│  │                         │  │ Decision Agent                 │ ││   │
+│  │                         │  │ Synthesize Final Decision      │ ││   │
+│  │                         │  └────────────────────────────────┘ ││   │
+│  │                         └──────────────────────────────────────┘│   │
+│  └──────────────────────────┬───────────────────────────────────────┘   │
+│                             │                                            │
+│  ┌──────────────────────────▼───────────────────────────────────────┐   │
+│  │              FastAPI — 13 Versioned Endpoints                    │   │
+│  │  /v1/assess  /v1/predict  /v1/fraud  /v1/explain                │   │
+│  │  /v1/agent   /v1/multi-agent  /v1/override  /v1/audit           │   │
+│  │  /v1/monitor /v1/cache  /v1/predictions  /v1/agent-decisions    │   │
+│  │  /v1/health  /v1/model-info                                     │   │
+│  │  API Key Auth + Pydantic Validation + Redis Caching             │   │
+│  └──────────────┬───────────────────────┬────────────────────────┬─┘   │
+│                 │                       │                        │      │
+│  ┌──────────────▼──────┐  ┌────────────▼──────┐  ┌─────────────▼─┐   │
+│  │   PostgreSQL        │  │   Redis Cache     │  │  MCP Server   │   │
+│  │   4 Tables          │  │   Predictions     │  │   9 Tools     │   │
+│  │   predictions       │  │   1hr TTL         │  │   Claude      │   │
+│  │   agent_decisions   │  └───────────────────┘  │   Desktop     │   │
+│  │   overrides         │                         └───────────────┘   │
+│  │   drift_reports     │                                              │
+│  └─────────────────────┘                                              │
+│                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │              AWS INFRASTRUCTURE                                  │   │
+│  │  ECS Fargate → ECR → CloudWatch → SSM → GitHub Actions CI/CD   │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -100,15 +113,20 @@ It combines classical ML with modern LLM-based agentic AI and exposes everything
 | **Credit Risk ML** | XGBoost 3.2 + MLflow | Risk scoring + experiment tracking |
 | **Fraud Detection** | Isolation Forest + XGBOD ensemble | Anomaly detection |
 | **Explainability** | SHAP | Feature importance per prediction |
-| **API** | FastAPI 0.135 | 10 versioned endpoints + auth + validation |
+| **API** | FastAPI 0.135 | 13 versioned endpoints + auth + validation |
 | **RAG** | LangChain + Pinecone | Policy document retrieval |
-| **Agent** | LangGraph + Groq Llama 3.3 70B | ReAct reasoning over 4 tools |
-| **MCP Server** | MCP SDK | 7 tools for Claude Desktop |
+| **Single Agent** | LangGraph + Groq Llama 3.3 70B | ReAct reasoning over 4 tools |
+| **Multi-Agent** | LangGraph StateGraph | Risk + Compliance + Decision agents |
+| **MCP Server** | MCP SDK | 9 tools for Claude Desktop |
+| **Streaming** | Apache Kafka | Real-time loan application pipeline |
+| **Database** | PostgreSQL + SQLAlchemy | Predictions + decisions + audit logs |
+| **Cache** | Redis | Prediction result caching (1hr TTL) |
 | **Evaluation** | Sentence-transformers + LangSmith | RAG quality measurement |
 | **Monitoring** | CloudWatch + Drift Detector | Model performance tracking |
 | **Storage** | AWS S3 | Data lake + models + audit logs |
 | **Deployment** | Docker + AWS ECS Fargate | Containerized production |
 | **CI/CD** | GitHub Actions | Auto-deploy on push to main |
+| **Frontend** | Streamlit | 5-page interactive UI |
 | **Secrets** | AWS SSM Parameter Store | Secure credential management |
 
 ---
@@ -118,36 +136,32 @@ It combines classical ML with modern LLM-based agentic AI and exposes everything
 ### 1. Dual ML System — Credit Risk + Fraud Detection
 
 **Credit Risk (XGBoost):**
-- Trained on **1.3M Lending Club loan records** (2007–2018)
-- **31 features** including engineered features (loan-to-income, FICO average, utilization flag)
-- **AUC-ROC: 0.7198** — validated with zero data leakage
-- Handles **19.96% class imbalance** via `scale_pos_weight`
-- Full experiment tracking with **MLflow**
+- Trained on **1.3M Lending Club records** (2007–2018)
+- **31 features** including engineered features (loan-to-income, FICO avg, utilization flag)
+- **AUC-ROC: 0.7198** — zero data leakage validated via correlation analysis
+- **19.96% class imbalance** handled via `scale_pos_weight`
 
 **Fraud Detection (Isolation Forest + XGBOD Ensemble):**
 - **Isolation Forest** — unsupervised anomaly detection, no fraud labels required
 - **XGBOD** — supervised ensemble using proxy fraud labels from behavioral indicators
-- **AUC-ROC: 0.8841** — strong detection performance
-- **7.31% fraud rate** identified in training data
-- Detects: high utilization, multiple delinquencies, public records, bankruptcy, suspicious loan-to-income
+- **AUC-ROC: 0.8841** — strong detection on 7.31% fraud rate
+- Detects: high utilization, delinquencies, public records, bankruptcy, suspicious patterns
 
-**Combined `/v1/assess` response:**
+**Combined `/v1/assess` response (low risk):**
 ```json
 {
   "credit_risk_score": 0.3638,
   "credit_decision": "REVIEW",
-  "credit_risk_level": "MEDIUM RISK",
   "fraud_score": 0.4006,
   "fraud_flag": false,
   "fraud_risk": "MEDIUM",
   "fraud_indicators": [],
   "combined_decision": "REVIEW",
-  "combined_risk": "MANUAL REVIEW REQUIRED",
-  "message": "REVIEW — Credit Risk: 0.3638, Fraud Risk: MEDIUM"
+  "combined_risk": "MANUAL REVIEW REQUIRED"
 }
 ```
 
-**High-risk fraud case response:**
+**Combined `/v1/assess` response (high risk + fraud):**
 ```json
 {
   "credit_risk_score": 0.8823,
@@ -170,48 +184,53 @@ It combines classical ML with modern LLM-based agentic AI and exposes everything
 
 ### 2. Explainable AI (SHAP)
 - SHAP values for every prediction
-- Top risk factors and protective factors per request
+- Top risk and protective factors per request
 - Regulatory compliance — every decision is fully auditable
-```json
-{
-  "top_risk_factors": [
-    {"feature": "home_ownership", "impact": 0.0629},
-    {"feature": "fico_range_low", "impact": 0.0431}
-  ],
-  "top_protective_factors": [
-    {"feature": "sub_grade", "impact": -0.3377},
-    {"feature": "grade", "impact": -0.1670}
-  ]
-}
+
+### 3. Multi-Agent Workflow (3 Agents)
+```
+Risk Agent → Compliance Agent → Decision Agent
+```
+- **Risk Agent**: PredictRisk + ExplainDecision + DetectFraud
+- **Compliance Agent**: RetrievePolicy + CheckRegulations (ECOA/FCRA)
+- **Decision Agent**: Synthesizes final recommendation with conditions
+
+### 4. Real-Time Kafka Streaming
+```
+Loan Applications → Kafka Topic (3 partitions)
+        ↓
+Consumer scores each application via /v1/assess
+        ↓
+Results logged to PostgreSQL
+        ↓
+Real-time decision stats
 ```
 
-### 3. LangChain RAG (Pinecone)
-- Credit risk policy documents ingested into Pinecone vector store
-- Retrieves relevant policy context for any risk level
-- Semantic similarity: **0.6168** | Context recall: **0.6168**
-- All traces logged to **LangSmith**
+### 5. PostgreSQL Persistence (4 Tables)
+- `predictions` — every scored application
+- `agent_decisions` — single + multi-agent reports
+- `overrides` — HITL reviewer decisions
+- `drift_reports` — model performance history
 
-### 4. ReAct Agent (Groq Llama 3.3 70B)
-- **4 tools**: PredictRisk, RetrievePolicy, ExplainDecision, RetrieveSimilarCases
-- True ReAct loop — agent reasons which tools to call and in what order
-- Returns fully justified decision with policy citations
+### 6. Redis Caching
+- `/v1/predict` results cached for 1 hour
+- Cache key = MD5 hash of application payload
+- Cache stats via `/v1/cache`
 
-### 5. Human-in-the-Loop (HITL)
-- Manual override for underwriter review
-- Full audit trail in S3 — reviewer ID, reason, timestamp
-- ECOA and FCRA compliant
-- Retrievable via `/v1/audit`
+### 7. Human-in-the-Loop (HITL)
+- Manual override endpoint for underwriter review
+- Dual logging — PostgreSQL + S3
+- ECOA and FCRA compliant audit trail
 
-### 6. Model Drift Detection
-- Monitors AUC-ROC vs baseline (0.7198)
-- CloudWatch metrics
-- CRITICAL alert if AUC < 0.70 (policy threshold)
-- Live via `/v1/monitor`
+### 8. Model Drift Detection
+- AUC-ROC monitored vs baseline (0.7198)
+- CloudWatch metrics + PostgreSQL logging
+- CRITICAL alert if AUC < 0.70
 
-### 7. MCP Server
-- 7 tools via Model Context Protocol
-- Full HITL workflow in Claude Desktop
-- Natural language access to all system capabilities
+### 9. MCP Server (9 Tools)
+- Full system exposed via Model Context Protocol
+- Complete HITL workflow in Claude Desktop
+- Natural language access to all capabilities
 
 ---
 
@@ -221,48 +240,48 @@ It combines classical ML with modern LLM-based agentic AI and exposes everything
 |--------|----------|------|-------------|
 | `GET` | `/v1/health` | ❌ | ECS health check |
 | `GET` | `/v1/model-info` | ❌ | Model metadata + metrics |
-| `POST` | `/v1/assess` | ✅ | ⭐ Combined credit risk + fraud |
-| `POST` | `/v1/predict` | ✅ | Credit risk score only |
+| `POST` | `/v1/assess` | ✅ | ⭐ Combined credit + fraud |
+| `POST` | `/v1/predict` | ✅ | Credit risk only (Redis cached) |
 | `POST` | `/v1/fraud` | ✅ | Fraud detection only |
 | `POST` | `/v1/explain` | ✅ | SHAP feature importance |
-| `POST` | `/v1/agent` | ✅ | Full ReAct agent analysis |
+| `POST` | `/v1/agent` | ✅ | Single ReAct agent |
+| `POST` | `/v1/multi-agent` | ✅ | ⭐ 3-agent workflow |
 | `POST` | `/v1/override` | ✅ | HITL manual override |
-| `GET` | `/v1/audit` | ✅ | Override audit log |
+| `GET` | `/v1/audit` | ✅ | S3 override audit log |
 | `GET` | `/v1/monitor` | ✅ | Model drift report |
-
-All authenticated endpoints require `X-API-Key` header.
+| `GET` | `/v1/cache` | ✅ | Redis cache stats |
+| `GET` | `/v1/predictions` | ✅ | PostgreSQL predictions history |
+| `GET` | `/v1/agent-decisions` | ✅ | PostgreSQL agent decisions |
 
 ---
 
 ## 🔌 MCP Integration
 
-This system is exposed as an **MCP server**, enabling Claude Desktop to call credit risk tools in natural language.
-
-### MCP Tools
+### MCP Tools (9 Total)
 
 | Tool | Description |
 |------|-------------|
-| `assess_credit_risk` | Score a loan — risk score, decision, risk level |
-| `explain_credit_decision` | SHAP explanation — top risk and protective factors |
-| `query_credit_policy` | Semantic search over Pinecone policy documents |
-| `run_full_agent_analysis` | Complete ReAct agent analysis |
-| `override_credit_decision` | HITL override — logs to S3 audit trail |
-| `get_audit_log` | Full override history for compliance |
-| `get_model_info` | Model metadata and AUC scores |
+| `assess_credit_risk` | Credit risk score + decision |
+| `explain_credit_decision` | SHAP risk + protective factors |
+| `query_credit_policy` | Pinecone policy search |
+| `run_full_agent_analysis` | Single ReAct agent |
+| `assess_combined` | Combined credit + fraud assessment |
+| `run_multi_agent_analysis` | 3-agent workflow |
+| `override_credit_decision` | HITL override → S3 audit |
+| `get_audit_log` | Full compliance history |
+| `get_model_info` | Model metadata + AUC scores |
 
-### Setup
-
-**1. Configure Claude Desktop:**
+### Setup Claude Desktop
 
 Add to `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "credit-risk-ai": {
-      "command": "/Users/yourname/Code/credit-risk-ai/.credai/bin/python",
-      "args": ["/Users/yourname/Code/credit-risk-ai/src/mcp_server.py"],
+      "command": "/path/to/credit-risk-ai/.credai/bin/python",
+      "args": ["/path/to/credit-risk-ai/src/mcp_server.py"],
       "env": {
-        "API_BASE_URL": "http://localhost:8000",
+        "API_BASE_URL": "http://127.0.0.1:8000",
         "API_KEY": "your-api-key",
         "PINECONE_API_KEY": "your-pinecone-key",
         "PINECONE_INDEX_NAME": "credit-risk-policy"
@@ -272,49 +291,27 @@ Add to `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-**2. Start API + restart Claude Desktop**
-
-**3. Verify** — look for 🔨 tools icon in Claude Desktop
-
 ### Full HITL Demo in Claude Desktop
 
-**Step 1 — Assess:**
 ```
-Assess the credit risk for the sample application using assess_credit_risk tool
-```
-→ Returns: Risk score 0.364, decision REVIEW
+Step 1: "Use assess_combined tool for this application: [data]"
+        → Credit: 0.3638 REVIEW | Fraud: 0.4006 MEDIUM
 
-**Step 2 — Explain:**
-```
-Explain what factors drove this decision using explain_credit_decision tool
-```
-→ Returns: SHAP values, sub_grade strongest protective factor (-0.338)
+Step 2: "Explain using explain_credit_decision tool"
+        → SHAP: sub_grade -0.338 (protective), home_ownership +0.063 (risk)
 
-**Step 3 — Query Policy:**
-```
-Using query_credit_policy tool, what does our policy say about 
-REVIEW decisions and when human override is required?
-```
-→ Returns: Policy retrieval — manual review criteria for score 0.3-0.6 band
+Step 3: "Query policy using query_credit_policy: when is override required?"
+        → Policy: REVIEW band 0.3-0.6, human discretion for edge cases
 
-**Step 4 — Override:**
-```
-As underwriter_pranav, override to APPROVE using override_credit_decision tool.
-Reason: Borrower has 10 years stable employment and decreasing revolving balance.
-```
-→ Returns: Override confirmed, logged to S3 audit trail
+Step 4: "Override to APPROVE as underwriter_pranav — stable employment"
+        → Logged to S3 + PostgreSQL audit trail
 
-**Step 5 — Audit:**
-```
-Show me the full audit log using get_audit_log tool
-```
-→ Returns: Full compliance log with reviewer ID, timestamp, decisions
+Step 5: "Show audit log using get_audit_log"
+        → Full compliance record with reviewer ID + timestamp
 
-**Step 6 — Full Analysis:**
+Step 6: "Run run_multi_agent_analysis"
+        → 3 agents: Risk → Compliance → Decision → APPROVE with conditions
 ```
-Run complete analysis using run_full_agent_analysis tool
-```
-→ Returns: Groq Llama 3.3 70B reasoning through all 4 tools
 
 ---
 
@@ -342,22 +339,28 @@ Run complete analysis using run_full_agent_analysis tool
 credit-risk-ai/
 ├── src/
 │   ├── pipeline/
-│   │   └── data_pipeline.py       # S3 data ingestion + feature engineering
+│   │   └── data_pipeline.py        # S3 ingestion + feature engineering
 │   ├── model/
-│   │   ├── train.py               # XGBoost + MLflow
-│   │   └── fraud_detector.py      # Isolation Forest + XGBOD ensemble
+│   │   ├── train.py                # XGBoost + MLflow
+│   │   └── fraud_detector.py       # Isolation Forest + XGBOD
 │   ├── api/
-│   │   └── main.py                # FastAPI — 10 endpoints
+│   │   └── main.py                 # FastAPI — 13 endpoints
 │   ├── rag/
-│   │   ├── ingest.py              # Pinecone ingestion
-│   │   └── retriever.py           # LangChain RAG chain
+│   │   ├── ingest.py               # Pinecone ingestion
+│   │   └── retriever.py            # LangChain RAG chain
 │   ├── agent/
-│   │   └── agent.py               # LangGraph ReAct + 4 tools
+│   │   ├── agent.py                # Single ReAct agent
+│   │   └── multi_agent.py          # 3-agent LangGraph workflow
 │   ├── evaluation/
-│   │   └── evaluate_rag.py        # RAG evaluation
+│   │   └── evaluate_rag.py         # RAG evaluation pipeline
 │   ├── monitoring/
-│   │   └── drift_detector.py      # Drift detection + CloudWatch
-│   └── mcp_server.py              # MCP server — 7 tools
+│   │   └── drift_detector.py       # Drift detection + CloudWatch
+│   ├── database.py                 # PostgreSQL models + sessions
+│   ├── cache.py                    # Redis caching utilities
+│   ├── kafka_producer.py           # Loan application producer
+│   ├── kafka_consumer.py           # Real-time scoring consumer
+│   └── mcp_server.py               # MCP server — 9 tools
+├── streamlit_app.py                # 5-page Streamlit UI
 ├── policies/
 │   └── credit_risk_policy.txt
 ├── docker/
@@ -373,33 +376,63 @@ credit-risk-ai/
 
 ## 🛠️ Setup
 
+### Prerequisites
+- Python 3.12+
+- Docker Desktop
+- PostgreSQL 15
+- Redis
+- Apache Kafka
+- AWS CLI configured
+- API keys: Groq, Pinecone, LangSmith
+
+### 1. Clone and Install
 ```bash
-# Clone
 git clone https://github.com/prnav1923/credit-risk-ai.git
 cd credit-risk-ai
-
-# Install
 python3 -m venv .credai
 source .credai/bin/activate
 pip install -r requirements.txt
+```
 
-# Configure
-cp .env.example .env  # fill in API keys
+### 2. Configure Environment
+```bash
+cp .env.example .env
+# Fill in all API keys
+```
 
-# Pipeline
+### 3. Setup Database
+```bash
+createdb credit_risk_db
+python src/database.py
+```
+
+### 4. Start Services
+```bash
+brew services start postgresql@15
+brew services start redis
+brew services start kafka
+```
+
+### 5. Run Pipeline + Training
+```bash
 python src/pipeline/data_pipeline.py
-
-# Train
 python src/model/train.py
 python src/model/fraud_detector.py
-
-# Ingest policies
 python src/rag/ingest.py
+```
 
-# Start API
+### 6. Start API
+```bash
 uvicorn src.api.main:app --reload --port 8000
+```
 
-# Or Docker
+### 7. Start Streamlit
+```bash
+streamlit run streamlit_app.py
+```
+
+### 8. Docker
+```bash
 docker-compose -f docker/docker-compose.yml up
 ```
 
@@ -411,37 +444,62 @@ docker-compose -f docker/docker-compose.yml up
 # Health
 curl http://localhost:8000/v1/health
 
-# Combined assessment
+# Combined Assessment
 curl -X POST http://localhost:8000/v1/assess \
   -H "X-API-Key: your-key" \
   -H "Content-Type: application/json" \
   -d '{"loan_amnt":10000,"int_rate":12.5,"installment":350,"annual_inc":60000,"dti":18.5,"delinq_2yrs":0,"fico_range_low":680,"fico_range_high":684,"open_acc":10,"pub_rec":0,"revol_bal":15000,"revol_util":45,"total_acc":25,"emp_length":5,"mort_acc":2,"pub_rec_bankruptcies":0,"num_actv_bc_tl":4,"bc_util":50,"percent_bc_gt_75":25,"avg_cur_bal":8000,"home_ownership":"RENT","verification_status":"Verified","purpose":"debt_consolidation","grade":"B","sub_grade":"B3","initial_list_status":"w","application_type":"Individual"}'
 
-# Drift monitor
-curl http://localhost:8000/v1/monitor -H "X-API-Key: your-key"
+# Kafka Streaming
+python src/kafka_consumer.py  # Terminal 1
+python src/kafka_producer.py  # Terminal 2
 
-# RAG evaluation
+# Drift Detection
+python src/monitoring/drift_detector.py
+
+# RAG Evaluation
 python src/evaluation/evaluate_rag.py
 ```
 
 ---
 
-## 🔄 CI/CD
+## 🖥️ Streamlit UI (5 Pages)
 
-Every push to `main`:
+| Page | Description |
+|------|-------------|
+| 🎯 Single Assessment | Credit + fraud assessment with gauges + SHAP chart |
+| 🤖 Multi-Agent Analysis | 3-agent workflow with architecture diagram |
+| 📊 Model Info | AUC scores, drift status, RAG metrics |
+| 📋 Audit Log | HITL override history + submit new override |
+| 📈 Predictions History | All scored applications with charts from PostgreSQL |
+
+---
+
+## 🔄 CI/CD Pipeline
+
 ```
-git push → GitHub Actions → Docker build (linux/amd64) → ECR → ECS Fargate ✅
+git push origin main
+        ↓
+GitHub Actions
+        ↓
+Build Docker image (linux/amd64)
+        ↓
+Push to AWS ECR
+        ↓
+Update ECS task definition
+        ↓
+Deploy to ECS Fargate ✅
 ```
 
 ---
 
 ## 🔐 Security
 
-- API key auth on all business endpoints
+- API key authentication on all business endpoints
 - Secrets in AWS SSM Parameter Store
 - Pydantic input validation (range checks, enum validation)
 - No credentials in code or Docker image
-- Full S3 audit trail (ECOA/FCRA compliant)
+- Dual audit trail: PostgreSQL + S3 (ECOA/FCRA compliant)
 
 ---
 
@@ -450,11 +508,9 @@ git push → GitHub Actions → Docker build (linux/amd64) → ECR → ECS Farga
 - [x] v1.0 — Core system (ML + RAG + Agent + API + ECS + CI/CD)
 - [x] v1.1 — Fraud Detection (Isolation Forest + XGBOD, AUC 0.88)
 - [x] v1.2 — MCP Server (7 tools, Claude Desktop, full HITL demo)
-- [ ] v2.0 — Multi-Agent (Risk + Fraud + Compliance + Decision agents)
-- [ ] v2.1 — Streamlit frontend
-- [ ] v2.2 — PostgreSQL + SQLAlchemy audit logging
-- [ ] v2.3 — Redis async caching
-- [ ] v3.0 — Kafka streaming + real-time pipeline
+- [x] v2.0 — Multi-Agent (Risk + Compliance + Decision) + PostgreSQL + Redis + Kafka + Streamlit + 9 MCP tools
+- [ ] v3.0 — Fine-tuning domain-specific LLM on credit risk Q&A
+- [ ] v3.1 — Real-time dashboards with Grafana + Prometheus
 
 ---
 
