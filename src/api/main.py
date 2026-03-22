@@ -23,7 +23,8 @@ from src.agent.multi_agent import run_multi_agent
 from sqlalchemy.orm import Session
 from src.database import get_db, Prediction, AgentDecision, Override, DriftReport, init_db
 from src.cache import get_cache_key, get_cached, set_cached, get_cache_stats
-
+from src.security import validate_application_security, sanitize_text
+from src.features import prepare_features_for_serving
 load_dotenv()
 
 logging.basicConfig(
@@ -227,24 +228,8 @@ class MultiAgentResponse(BaseModel):
 
 
 # --- Preprocess input ---
-def preprocess_input(data: LoanApplication) -> pd.DataFrame:
-    df = pd.DataFrame([data.dict()])
-
-    # Engineered features
-    df['loan_to_income'] = df['loan_amnt'] / df['annual_inc']
-    df['fico_avg'] = (df['fico_range_low'] + df['fico_range_high']) / 2
-    df['high_utilization'] = (df['revol_util'] > 75).astype(int)
-
-    # Encode categoricals
-    for col in CATEGORICAL_COLS:
-        if col in encoders:
-            try:
-                df[col] = encoders[col].transform(df[col].astype(str))
-            except ValueError:
-                df[col] = 0  # unseen category
-
-    feature_cols = NUMERIC_COLS + CATEGORICAL_COLS
-    return df[feature_cols]
+def preprocess_input(application: LoanApplication) -> pd.DataFrame:
+    return prepare_features_for_serving(application.dict(), encoders)
 
 
 # --- Decision logic ---
@@ -361,6 +346,11 @@ def agent_endpoint(request: AgentRequest, db: Session = Depends(get_db)):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     try:
+        # Security check
+        is_safe, error = validate_application_security(request.application.dict())
+        if not is_safe:
+            logger.warning(f"Security check failed: {error}")
+            raise HTTPException(status_code=400, detail=f"Security violation: {error}")
         report = run_agent(request.application.dict())
 
         # Extract decision from report
@@ -594,6 +584,11 @@ def multi_agent_endpoint(request: AgentRequest, db: Session = Depends(get_db)):
     if model is None:
         raise HTTPException(status_code=503, detail="Models not loaded")
     try:
+        # Security check
+        is_safe, error = validate_application_security(request.application.dict())
+        if not is_safe:
+            logger.warning(f"Security check failed: {error}")
+            raise HTTPException(status_code=400, detail=f"Security violation: {error}")
         report = run_multi_agent(request.application.dict())
 
         # Extract decision from report
