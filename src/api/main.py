@@ -357,11 +357,32 @@ def explain(application: LoanApplication):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/v1/agent", response_model=AgentResponse, dependencies=[Depends(verify_api_key)])
-def agent_endpoint(request: AgentRequest):
+def agent_endpoint(request: AgentRequest, db: Session = Depends(get_db)):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     try:
         report = run_agent(request.application.dict())
+
+        # Extract decision from report
+        decision = "UNKNOWN"
+        if "APPROVE" in report.upper():
+            decision = "APPROVE"
+        elif "DECLINE" in report.upper():
+            decision = "DECLINE"
+        elif "REVIEW" in report.upper():
+            decision = "REVIEW"
+
+        # Log to PostgreSQL
+        agent_decision = AgentDecision(
+            agent_type="single",
+            application_json=request.application.dict(),
+            report=report,
+            decision=decision
+        )
+        db.add(agent_decision)
+        db.commit()
+        logger.info(f"Agent decision logged to PostgreSQL — ID: {agent_decision.id}")
+
         return AgentResponse(report=report)
     except Exception as e:
         logger.error(f"Agent error: {e}")
@@ -569,11 +590,32 @@ def assess(application: LoanApplication, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/v1/multi-agent", response_model=MultiAgentResponse, dependencies=[Depends(verify_api_key)])
-def multi_agent_endpoint(request: AgentRequest):
+def multi_agent_endpoint(request: AgentRequest, db: Session = Depends(get_db)):
     if model is None:
         raise HTTPException(status_code=503, detail="Models not loaded")
     try:
         report = run_multi_agent(request.application.dict())
+
+        # Extract decision from report
+        decision = "UNKNOWN"
+        if "APPROVE" in report.upper():
+            decision = "APPROVE"
+        elif "DECLINE" in report.upper():
+            decision = "DECLINE"
+        elif "REVIEW" in report.upper():
+            decision = "REVIEW"
+
+        # Log to PostgreSQL
+        agent_decision = AgentDecision(
+            agent_type="multi",
+            application_json=request.application.dict(),
+            report=report,
+            decision=decision
+        )
+        db.add(agent_decision)
+        db.commit()
+        logger.info(f"Multi-agent decision logged to PostgreSQL — ID: {agent_decision.id}")
+
         return MultiAgentResponse(report=report)
     except Exception as e:
         logger.error(f"Multi-agent error: {e}")
@@ -605,3 +647,23 @@ def get_predictions(limit: int = 20, db: Session = Depends(get_db)):
 @app.get("/v1/cache", dependencies=[Depends(verify_api_key)])
 def cache_stats():
     return get_cache_stats()
+
+
+@app.get("/v1/agent-decisions", dependencies=[Depends(verify_api_key)])
+def get_agent_decisions(limit: int = 20, db: Session = Depends(get_db)):
+    decisions = db.query(AgentDecision).order_by(
+        AgentDecision.timestamp.desc()
+    ).limit(limit).all()
+    return {
+        "total": db.query(AgentDecision).count(),
+        "decisions": [
+            {
+                "id": d.id,
+                "timestamp": d.timestamp.isoformat(),
+                "agent_type": d.agent_type,
+                "decision": d.decision,
+                "report_preview": d.report[:200] + "..."
+            }
+            for d in decisions
+        ]
+    }

@@ -132,7 +132,7 @@ st.sidebar.markdown("## 🏦 Credit Risk AI")
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "Navigation",
-    ["🎯 Single Assessment", "🤖 Multi-Agent Analysis", "📊 Model Info", "📋 Audit Log"]
+    ["🎯 Single Assessment", "🤖 Multi-Agent Analysis", "📊 Model Info", "📋 Audit Log", "📈 Predictions History"]
 )
 st.sidebar.markdown("---")
 st.sidebar.markdown("**System Status**")
@@ -478,3 +478,90 @@ elif page == "📋 Audit Log":
                 st.success(f"✅ Override recorded — {result['override_decision']} by {result['reviewer_id']}")
             else:
                 st.error(f"Error: {result}")
+
+# ============================================================
+# PAGE 5 — PREDICTIONS HISTORY
+# ============================================================
+elif page == "📈 Predictions History":
+    st.markdown('<div class="main-header">📈 Predictions History</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">All scored applications from API + Kafka streaming</div>', unsafe_allow_html=True)
+
+    result, status = call_api("/v1/predictions", method="GET")
+
+    if status == 200:
+        st.metric("Total Predictions", result["total"])
+
+        if result["total"] == 0:
+            st.info("No predictions recorded yet.")
+        else:
+            # Convert to DataFrame
+            df = pd.DataFrame(result["predictions"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                approve_count = len(df[df["combined_decision"] == "APPROVE"])
+                st.metric("Approved", approve_count)
+            with col2:
+                review_count = len(df[df["combined_decision"] == "REVIEW"])
+                st.metric("Review", review_count)
+            with col3:
+                decline_count = len(df[df["combined_decision"] == "DECLINE"])
+                st.metric("Declined", decline_count)
+            with col4:
+                fraud_count = len(df[df["fraud_flag"] == True])
+                st.metric("Fraud Detected", fraud_count)
+
+            st.markdown("---")
+
+            # Decision distribution chart
+            col1, col2 = st.columns(2)
+            with col1:
+                decision_counts = df["combined_decision"].value_counts()
+                fig = px.pie(
+                    values=decision_counts.values,
+                    names=decision_counts.index,
+                    title="Decision Distribution",
+                    color_discrete_map={
+                        "APPROVE": "#28a745",
+                        "REVIEW": "#ffc107",
+                        "DECLINE": "#dc3545"
+                    }
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                fig = px.histogram(
+                    df,
+                    x="credit_risk_score",
+                    title="Credit Risk Score Distribution",
+                    color_discrete_sequence=["#1f77b4"],
+                    nbins=20
+                )
+                fig.add_vline(x=0.3, line_dash="dash", line_color="green", annotation_text="Approve threshold")
+                fig.add_vline(x=0.6, line_dash="dash", line_color="red", annotation_text="Decline threshold")
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("---")
+            st.markdown("### Recent Predictions")
+
+            # Style the dataframe
+            display_df = df[[
+                "id", "timestamp", "grade",
+                "credit_risk_score", "credit_decision",
+                "fraud_score", "fraud_flag",
+                "combined_decision"
+            ]].copy()
+
+            display_df["fraud_flag"] = display_df["fraud_flag"].map(
+                {True: "⚠️ YES", False: "✅ NO"}
+            )
+            display_df["combined_decision"] = display_df["combined_decision"].map(
+                {"APPROVE": "🟢 APPROVE", "REVIEW": "🟡 REVIEW", "DECLINE": "🔴 DECLINE"}
+            )
+
+            st.dataframe(display_df, use_container_width=True)
+
+    else:
+        st.error("Could not fetch predictions. Is the API running?")

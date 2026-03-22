@@ -1,3 +1,7 @@
+import sys
+sys.path.insert(0, '/Users/pranav/Code/credit-risk-ai')
+from src.database import SessionLocal, DriftReport
+
 import os
 import json
 import logging
@@ -143,6 +147,24 @@ def run_drift_detection():
 
     log_drift_to_s3(drift_report)
     log_to_cloudwatch(drift_report)
+
+    # Log to PostgreSQL
+    try:
+        db = SessionLocal()
+        drift_record = DriftReport(
+            status=drift_report["status"],
+            baseline_auc=drift_report["baseline_auc"],
+            current_auc=drift_report["current_auc"],
+            drift=drift_report["drift"],
+            drift_pct=drift_report["drift_pct"],
+            action=drift_report["action"]
+        )
+        db.add(drift_record)
+        db.commit()
+        db.close()
+        logger.info("Drift report logged to PostgreSQL ✅")
+    except Exception as e:
+        logger.warning(f"PostgreSQL logging failed: {e}")
 
     logger.info("=== Drift Detection Complete ✅ ===")
     return drift_report

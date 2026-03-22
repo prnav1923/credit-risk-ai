@@ -203,23 +203,64 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
                 "required": []
             }
-        ),
+        ),  
+        Tool(
+    name="assess_combined",
+    description=(
+        "Run combined credit risk AND fraud detection assessment. "
+        "Returns credit risk score, fraud score, fraud indicators, "
+        "and combined decision in one call. "
+        "Use this for a complete risk picture of any loan application."
+    ),
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "application": {
+                "type": "object",
+                "description": "Loan application data. If not provided uses sample data."
+            }
+        },
+        "required": []
+    }
+),
+Tool(
+    name="run_multi_agent_analysis",
+    description=(
+        "Run full 3-agent workflow: Risk Agent → Compliance Agent → Decision Agent. "
+        "Most comprehensive analysis available. "
+        "Risk Agent assesses credit + fraud. "
+        "Compliance Agent checks ECOA/FCRA policy. "
+        "Decision Agent synthesizes final recommendation. "
+        "Takes ~60 seconds but returns the most thorough analysis."
+    ),
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "application": {
+                "type": "object",
+                "description": "Loan application data. If not provided uses sample data."
+            }
+        },
+        "required": []
+    }
+),
     ]
 
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
 
         # --- Tool 1: Assess Credit Risk ---
         if name == "assess_credit_risk":
             application = arguments.get("application", SAMPLE_APPLICATION)
             try:
-                response = await client.post(
-                    f"{API_BASE_URL}/v1/predict",
-                    headers=HEADERS,
-                    json=application
-                )
+                async with httpx.AsyncClient(timeout=120.0) as inner_client:
+                    response = await client.post(
+                        f"{API_BASE_URL}/v1/predict",
+                        headers=HEADERS,
+                        json=application
+                    )
                 result = response.json()
                 output = (
                     f"Credit Risk Assessment:\n"
@@ -381,8 +422,61 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=f"Error: {str(e)}")]
 
-        else:
-            return [TextContent(type="text", text=f"Unknown tool: {name}")]
+        # --- Tool 8: Combined Assessment ---
+        elif name == "assess_combined":
+            application = arguments.get("application", SAMPLE_APPLICATION)
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as inner_client:
+                    response = await inner_client.post(
+                        f"{API_BASE_URL}/v1/assess",
+                        headers=HEADERS,
+                        json=application,
+                        timeout=60.0
+                    )
+        
+                # Debug — show raw response if parsing fails
+                raw = response.json()
+        
+                # Check if error returned
+                if "detail" in raw:
+                    return [TextContent(type="text", text=f"API Error: {raw['detail']}")]
+        
+                fraud_indicators = "\n".join(
+                    [f"  - {i}" for i in raw.get("fraud_indicators", [])]
+                ) or "  None detected"
+
+                output = (
+                    f"Combined Credit Risk + Fraud Assessment:\n\n"
+                    f"CREDIT RISK:\n"
+                    f"  Score: {raw.get('credit_risk_score', 'N/A')}\n"
+                    f"  Decision: {raw.get('credit_decision', 'N/A')}\n"
+                    f"  Risk Level: {raw.get('credit_risk_level', 'N/A')}\n\n"
+                    f"FRAUD DETECTION:\n"
+                    f"  Score: {raw.get('fraud_score', 'N/A')}\n"
+                    f"  Flag: {'⚠️ FRAUD DETECTED' if raw.get('fraud_flag') else '✅ Clean'}\n"
+                    f"  Risk: {raw.get('fraud_risk', 'N/A')}\n"
+                    f"  Indicators:\n{fraud_indicators}\n\n"
+                    f"COMBINED DECISION: {raw.get('combined_decision', 'N/A')}\n"
+                    f"COMBINED RISK: {raw.get('combined_risk', 'N/A')}\n"
+                    f"MESSAGE: {raw.get('message', 'N/A')}"
+                )
+                return [TextContent(type="text", text=output)]
+            except Exception as e:
+                return [TextContent(type="text", text=f"Error details: {str(e)}\nRaw response: {response.text if 'response' in dir() else 'No response'}")]
+        # --- Tool 9: Multi-Agent Analysis ---
+        elif name == "run_multi_agent_analysis":
+            application = arguments.get("application", SAMPLE_APPLICATION)
+            try:
+                response = await client.post(
+                    f"{API_BASE_URL}/v1/multi-agent",
+                    headers=HEADERS,
+                    json={"application": application},
+                    timeout=180.0
+                )
+                result = response.json()
+                return [TextContent(type="text", text=result['report'])]
+            except Exception as e:
+                return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 
 # --- Run server ---

@@ -1,3 +1,7 @@
+import sys
+sys.path.insert(0, '/Users/pranav/Code/credit-risk-ai')
+from src.database import SessionLocal, Prediction
+
 import json
 import logging
 import os
@@ -56,9 +60,7 @@ def assess_application(application: dict) -> dict:
 
 
 def consume_and_score():
-    """Consume loan applications and score them in real-time"""
     consumer = create_consumer()
-
     logger.info(f"Starting consumer — listening on topic: {TOPIC}")
     logger.info("Press Ctrl+C to stop")
 
@@ -71,7 +73,6 @@ def consume_and_score():
 
             logger.info(f"Received: {app_id} — Grade: {application['grade']}")
 
-            # Score the application
             result = assess_application(application)
 
             if "error" not in result:
@@ -85,9 +86,40 @@ def consume_and_score():
                     stats["review"] += 1
                 elif decision == "DECLINE":
                     stats["decline"] += 1
-
                 if fraud_flag:
                     stats["fraud"] += 1
+
+                # Log to PostgreSQL
+                try:
+                    db = SessionLocal()
+                    app_data = {k: v for k, v in application.items() if k != "app_id"}
+                    prediction = Prediction(
+                        loan_amnt=application.get("loan_amnt"),
+                        int_rate=application.get("int_rate"),
+                        annual_inc=application.get("annual_inc"),
+                        dti=application.get("dti"),
+                        fico_range_low=application.get("fico_range_low"),
+                        fico_range_high=application.get("fico_range_high"),
+                        grade=application.get("grade"),
+                        sub_grade=application.get("sub_grade"),
+                        home_ownership=application.get("home_ownership"),
+                        purpose=application.get("purpose"),
+                        credit_risk_score=result.get("credit_risk_score"),
+                        credit_decision=result.get("credit_decision"),
+                        credit_risk_level=result.get("credit_risk_level"),
+                        fraud_score=result.get("fraud_score"),
+                        fraud_flag=result.get("fraud_flag"),
+                        fraud_risk=result.get("fraud_risk"),
+                        fraud_indicators=result.get("fraud_indicators", []),
+                        combined_decision=decision,
+                        combined_risk=result.get("combined_risk"),
+                        application_json=app_data
+                    )
+                    db.add(prediction)
+                    db.commit()
+                    db.close()
+                except Exception as db_err:
+                    logger.warning(f"PostgreSQL logging failed: {db_err}")
 
                 logger.info(
                     f"✅ {app_id} → "
@@ -97,7 +129,6 @@ def consume_and_score():
                     f"Fraud Flag: {'⚠️' if fraud_flag else '✅'}"
                 )
 
-                # Print running stats every 5 applications
                 if stats["total"] % 5 == 0:
                     logger.info(
                         f"📊 Stats — Total: {stats['total']} | "
